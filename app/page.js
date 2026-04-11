@@ -35,17 +35,10 @@ export default function Home() {
 
   const handleFilterChange = (setter, value) => { setter(value); setCurrentPage(1); };
 
-  // --- FIX: Reset sub-filters when Main Category changes ---
   const handleCategoryChange = (val) => {
     setFMainType(val);
-    setFRace('All');
-    setFAttribute('All');
-    setFFrame('All');
-    setFMechanic('All');
-    setFAtk('');
-    setFDef('');
-    setFLvlMin(0);
-    setFLvlMax(13);
+    setFRace('All'); setFAttribute('All'); setFFrame('All'); setFMechanic('All');
+    setFAtk(''); setFDef(''); setFLvlMin(0); setFLvlMax(13);
     setCurrentPage(1);
   };
 
@@ -160,18 +153,105 @@ export default function Home() {
     );
   };
 
+  // --- META TIERS RENDERER ---
+  const renderMetaTiers = () => {
+    const total = metaData.totalDecks;
+    const archs = Object.entries(metaData.archetypes)
+      .map(([name, data]) => ({
+        name,
+        count: data.count,
+        pct: (data.count / total) * 100
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    // Filter Logic for Tiers
+    const t1 = archs.filter(a => a.pct > 15);
+    const t2 = archs.filter(a => a.pct >= 5 && a.pct <= 15);
+    const t3 = archs.filter(a => a.pct >= 3 && a.pct < 5); 
+    const rogue = archs.filter(a => a.pct >= 1 && a.pct < 3); // STRICT 1-3%
+
+    // Pie Chart Visual Logic
+    const chartData = [];
+    let otherCount = 0;
+    archs.forEach(a => {
+      if (a.pct >= 1) chartData.push(a); // Group < 1% as Other
+      else otherCount += a.count;
+    });
+    if (otherCount > 0) chartData.push({ name: 'Other', count: otherCount, pct: (otherCount / total) * 100 });
+
+    let currentPos = 0;
+    const colors = ['#2563eb', '#7c3aed', '#db2777', '#ea580c', '#16a34a', '#ca8a04', '#0891b2', '#4b5563'];
+    const gradientSteps = chartData.map((d, i) => {
+      const start = currentPos;
+      currentPos += d.pct;
+      return `${colors[i % colors.length]} ${start}% ${currentPos}%`;
+    }).join(', ');
+
+    const TierBox = ({ title, list, color, range }) => (
+      <div className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-6 flex flex-col gap-4">
+        <div className="flex justify-between items-baseline border-b border-zinc-800 pb-2">
+            <h3 className={`text-xl font-black uppercase italic ${color}`}>{title}</h3>
+            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{range}</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {list.length > 0 ? list.map(a => (
+            <div key={a.name} className="bg-black border border-zinc-800 px-4 py-2 rounded-xl flex items-center gap-3 shadow-md">
+              <span className="text-xs font-black text-white uppercase">{a.name}</span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${color.replace('text', 'bg')}/20 ${color}`}>
+                {Math.round(a.pct)}%
+              </span>
+            </div>
+          )) : <span className="text-zinc-600 text-xs font-bold uppercase italic">None currently active</span>}
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="animate-in fade-in duration-1000 max-w-5xl mx-auto space-y-12">
+        <div className="flex flex-col md:flex-row items-center justify-center gap-12 bg-zinc-900/30 p-10 rounded-[3rem] border border-zinc-800">
+          <div className="relative w-64 h-64 rounded-full shadow-[0_0_50px_rgba(0,0,0,0.5)] border-4 border-zinc-800" 
+               style={{ background: `conic-gradient(${gradientSteps})` }}>
+            <div className="absolute inset-8 bg-black rounded-full border border-zinc-800 flex items-center justify-center flex-col">
+              <span className="text-3xl font-black text-blue-500 leading-none">{total}</span>
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-1">Total Tops</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
+            {chartData.map((d, i) => (
+              <div key={d.name} className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: colors[i % colors.length] }} />
+                <span className="text-[11px] font-black uppercase text-zinc-300 truncate w-32">{d.name}</span>
+                <span className="text-[10px] font-mono text-zinc-500">{Math.round(d.pct)}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-6">
+          <TierBox title="Tier 1" range=">15% Representation" list={t1} color="text-blue-400" />
+          <TierBox title="Tier 2" range="5% - 15% Representation" list={t2} color="text-purple-400" />
+          <TierBox title="Tier 3" range="3% - 5% Representation" list={t3} color="text-pink-400" />
+          <TierBox title="Rogue" range="1% - 3% Representation" list={rogue} color="text-zinc-500" />
+        </div>
+      </div>
+    );
+  };
+
+  const sortedArchetypes = Object.entries(metaData.archetypes).sort((a,b) => b[1].count - a[1].count);
+
   return (
     <div className="min-h-screen bg-black text-white p-4 md:p-10 font-sans">
       <header className="flex flex-col items-center mb-10">
         <h1 className="text-6xl font-black tracking-tighter italic text-blue-600 mb-8 uppercase text-center drop-shadow-[0_0_15px_rgba(37,99,235,0.3)]">Pro Meta Scan</h1>
         <div className="flex bg-zinc-900 p-1 rounded-2xl border border-zinc-800 gap-1 flex-wrap justify-center shadow-xl">
-          {['overall', 'side', 'archetypes'].map(t => (
-            <button key={t} onClick={() => { setActiveTab(t); setSelectedDeckIndex("NONE"); resetFilters(); }} className={`px-10 py-3 rounded-xl font-black text-xs uppercase transition ${activeTab === t ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}>{t}</button>
+          {['overall', 'side', 'archetypes', 'meta-tiers'].map(t => (
+            <button key={t} onClick={() => { setActiveTab(t); setSelectedDeckIndex("NONE"); resetFilters(); }} className={`px-10 py-3 rounded-xl font-black text-xs uppercase transition ${activeTab === t ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}>
+              {t.replace('-', ' ')}
+            </button>
           ))}
         </div>
       </header>
 
-      {selectedDeckIndex === "NONE" && (
+      {selectedDeckIndex === "NONE" && activeTab !== 'meta-tiers' && (
         <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl mb-12 shadow-2xl space-y-6">
           <div className="flex flex-wrap gap-4 items-end">
             <div className="flex flex-col flex-grow min-w-[200px]"><label className="text-[10px] text-blue-500 uppercase font-bold mb-1">Search</label><input type="text" value={fSearch} onChange={(e) => handleFilterChange(setFSearch, e.target.value)} placeholder="Card name..." className="bg-black border border-zinc-700 rounded-lg p-2 text-xs outline-none focus:border-blue-500" /></div>
@@ -194,13 +274,14 @@ export default function Home() {
               <div className="flex flex-col"><label className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Property</label><select value={fRace} onChange={(e) => handleFilterChange(setFRace, e.target.value)} className="bg-black border border-zinc-700 rounded-lg p-2 text-xs">{(fMainType === 'Spell' ? spellRaces : trapRaces).map(r => <option key={r} value={r}>{r}</option>)}</select></div>
             )}
 
-            <label className="flex items-center gap-2 cursor-pointer bg-blue-900/30 border border-blue-700/50 p-2 px-4 rounded-lg text-[10px] h-[36px]"><input type="checkbox" checked={fReverse} onChange={(e) => handleFilterChange(setFReverse, e.target.checked)} className="accent-blue-500" /><span className="font-bold uppercase tracking-tighter text-blue-200">Reverse</span></label>
+            <label className="flex items-center gap-2 cursor-pointer bg-blue-900/30 border border-blue-700/50 p-2 px-4 rounded-lg text-[10px] h-[36px]"><input type="checkbox" checked={fReverse} onChange={(e) => handleFilterChange(setFReverse, e.target.checked)} className="accent-blue-500" /><span className="font-bold uppercase tracking-tighter text-blue-200">Reverse Sort</span></label>
             <button onClick={resetFilters} className="text-[10px] font-black text-red-500 uppercase border-b border-red-900 pb-1 ml-auto">Reset</button>
           </div>
         </div>
       )}
 
       <div className="animate-in fade-in duration-700">
+        {activeTab === 'meta-tiers' && renderMetaTiers()}
         {activeTab === 'overall' && renderGrid(metaData.overall, metaData.totalDecks)}
         {activeTab === 'side' && renderGrid(metaData.overallSide, metaData.totalDecks)}
 
