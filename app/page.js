@@ -28,7 +28,7 @@ export default function Home() {
 
   const attributes = ['All', 'DARK', 'LIGHT', 'EARTH', 'WATER', 'FIRE', 'WIND', 'DIVINE'];
   const monsterRaces = ['All', 'Aqua', 'Beast', 'Beast-Warrior', 'Cyberse', 'Dinosaur', 'Divine-Beast', 'Dragon', 'Fairy', 'Fiend', 'Fish', 'Illusion', 'Insect', 'Machine', 'Plant', 'Psychic', 'Pyro', 'Reptile', 'Rock', 'Sea Serpent', 'Spellcaster', 'Thunder', 'Warrior', 'Winged Beast', 'Wyrm'];
-  const frames = ['All', 'Normal', 'Effect', 'Fusion', 'Synchro', 'Xyz', 'Link', 'Ritual'];
+  const frames = ['All', 'Normal', 'Effect', 'Fusion', 'Synchro', 'XYZ', 'Link', 'Ritual'];
   const mechanics = ['All', 'Tuner', 'Pendulum', 'Spirit', 'Gemini', 'Union', 'Toon', 'Flip'];
   const spellRaces = ['All', 'Normal', 'Field', 'Equip', 'Continuous', 'Quick-Play', 'Ritual'];
   const trapRaces = ['All', 'Normal', 'Continuous', 'Counter'];

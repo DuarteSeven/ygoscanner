@@ -39,7 +39,15 @@ async function runScraper() {
     });
 
     console.log("2. Deep Scraping Decks + Real Creator Names...");
-    const database = { totalDecks: 0, overall: {}, overallSide: {}, archetypes: {}, cardDict: cardDictionary };
+    const database = { 
+        totalDecks: 0, 
+        overall: {}, 
+        overallSide: {}, 
+        archetypes: {}, 
+        cardDict: cardDictionary,
+        idMap: idToName 
+    };
+
     let offset = 0;
     let keepGoing = true;
 
@@ -66,7 +74,6 @@ async function runScraper() {
             const extraIds = parse(deck.extra_deck);
             const sideIds = parse(deck.side_deck);
 
-            // --- PLAYER NAME EXTRACTION ---
             let actualPlayer = deck.tournamentPlayerName || deck.username; 
             if (deck.deck_description && deck.deck_description.includes("Creator:")) {
                 const match = deck.deck_description.match(/Creator:\s*([^<]+)/);
@@ -82,7 +89,6 @@ async function runScraper() {
                 side: sideIds.map(id => ({ name: idToName[id], imgId: nameToImageId[idToName[id]] }))
             });
 
-            // --- AGGREGATE STATS (Using 'playedIn' to avoid NaN) ---
             const countSet = (idList, globalTarget, archTarget) => {
                 const counts = {};
                 idList.forEach(id => {
@@ -94,7 +100,7 @@ async function runScraper() {
                         if (!t[name]) t[name] = { "3x": 0, "2x": 0, "1x": 0, playedIn: 0, imgId: nameToImageId[name] };
                         const qKey = qty >= 3 ? "3x" : `${qty}x`;
                         t[name][qKey]++;
-                        t[name].playedIn++; // Reverted label to 'playedIn'
+                        t[name].playedIn++;
                     });
                 });
             };
@@ -106,6 +112,6 @@ async function runScraper() {
         await new Promise(r => setTimeout(r, 1000));
     }
     fs.writeFileSync('./meta_data.json', JSON.stringify(database, null, 2));
-    console.log("✅ Success! Percentage data fixed.");
+    console.log("✅ Success!");
 }
 runScraper();
