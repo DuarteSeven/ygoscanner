@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import metaData from '../../meta_data.json'; 
+import Link from 'next/link';
 
 export default function AnalyzerPage() {
   const [userDeck, setUserDeck] = useState(null);
@@ -10,7 +11,6 @@ export default function AnalyzerPage() {
   const RECS_PER_PAGE = 5;
 
   // --- MARKER STATE ---
-  // 0: None, 1: Starter (Green), 2: Non-Engine (Blue), 3: Brick (Red)
   const [cardMarkers, setCardMarkers] = useState({}); 
 
   // --- HYPERGEOMETRIC STATE ---
@@ -71,7 +71,7 @@ export default function AnalyzerPage() {
   const toggleMarker = (name) => {
     setCardMarkers(prev => {
       const current = prev[name] || 0;
-      const next = (current + 1) % 4; // Cycles 0, 1, 2, 3
+      const next = (current + 1) % 4; 
       return { ...prev, [name]: next };
     });
   };
@@ -81,8 +81,6 @@ export default function AnalyzerPage() {
     const N = userDeck.main.length;
     const n = 5;
     if (N < n) return null;
-
-    // Count quantities based on markers
     let kStart = 0; let kNon = 0; let kBrick = 0;
     Object.entries(cardMarkers).forEach(([name, type]) => {
       const count = userDeck.mainCounts[name] || 0;
@@ -90,33 +88,32 @@ export default function AnalyzerPage() {
       if (type === 2) kNon += count;
       if (type === 3) kBrick += count;
     });
-
-    // 1. Starters: Chance of seeing 0 (Bricking)
     const probZeroStart = getProb(N, n, kStart, 0);
     const starterRatio = probZeroStart > 0 ? (1 / probZeroStart).toFixed(1) : "0";
-
-    // 2. Non-Engine: Average per hand (Expected Value)
     const avgNonEngine = (n * (kNon / N)).toFixed(1);
-
-    // 3. Bricks: Chance of seeing 1 or more
     const probZeroBrick = getProb(N, n, kBrick, 0);
     const brickChance = 1 - probZeroBrick;
     const brickRatio = brickChance > 0 ? (1 / brickChance).toFixed(1) : "0";
-
     return { starterRatio, avgNonEngine, brickRatio, kStart, kNon, kBrick };
   };
 
   const mStats = getMarkerStats();
 
+  // --- FILTER HANDLERS ---
   const handleFilterChange = (setter, value) => { setter(value); setRecPage(1); };
+  
   const handleCategoryChange = (val) => {
-    setFMainType(val); setFRace('All'); setFAttribute('All'); setFFrame('All'); setFMechanic('All');
-    setFAtk(''); setFDef(''); setFLvlMin(0); setFLvlMax(13); setRecPage(1);
+    setFMainType(val);
+    setFRace('All'); setFAttribute('All'); setFFrame('All'); setFMechanic('All');
+    setFAtk(''); setFDef(''); setFLvlMin(0); setFLvlMax(13);
+    setRecPage(1);
   };
+
   const resetFilters = () => {
     setFSearch(''); setFReverse(false); setFMainType('All'); setFDeckType('All');
     setFAttribute('All'); setFRace('All'); setFFrame('All'); setFMechanic('All');
-    setFAtk(''); setFDef(''); setFLvlMin(0); setFLvlMax(13); setRecPage(1);
+    setFAtk(''); setFDef(''); setFLvlMin(0); setFLvlMax(13);
+    setRecPage(1);
   };
 
   const handleFileUpload = (e) => {
@@ -154,29 +151,50 @@ export default function AnalyzerPage() {
     const proData = compareSide ? (baseline === 'overall' ? metaData.overallSide : metaData.archetypes[baseline].sideCards) : (baseline === 'overall' ? metaData.overall : metaData.archetypes[baseline].cards);
     const totalBaselineDecks = (baseline === 'overall') ? metaData.totalDecks : metaData.archetypes[baseline].count;
     const userCounts = compareSide ? userDeck.sideCounts : userDeck.mainCounts;
+    
     let recs = [];
     Object.entries(proData).forEach(([name, stats]) => {
       const info = metaData.cardDict[name];
       if (!info) return;
+
+      // 1. Apply Full Filters
       if (fSearch && !name.toLowerCase().includes(fSearch.toLowerCase())) return;
-      const isMonster = !info.type.includes('Spell') && !info.type.includes('Trap');
-      if (fDeckType === 'Extra' && (!isMonster || !info.isExtra)) return;
-      if (fDeckType === 'Main' && (isMonster && info.isExtra)) return;
+      const isSpell = info.type.includes('Spell');
+      const isTrap = info.type.includes('Trap');
+      const isMonster = !isSpell && !isTrap;
+      const isExtra = info.isExtra;
+
+      if (fDeckType === 'Extra' && (!isMonster || !isExtra)) return;
+      if (fDeckType === 'Main' && (isMonster && isExtra)) return;
       if (fMainType === 'Monster' && !isMonster) return;
-      if (fMainType === 'Spell' && !info.type.includes('Spell')) return;
-      if (fMainType === 'Trap' && !info.type.includes('Trap')) return;
+      if (fMainType === 'Spell' && !isSpell) return;
+      if (fMainType === 'Trap' && !isTrap) return;
+
       if (isMonster) {
         if (fAttribute !== 'All' && info.attribute !== fAttribute) return;
         if (fRace !== 'All' && info.race !== fRace) return;
         if (fFrame !== 'All' && !info.type.toLowerCase().includes(fFrame.toLowerCase())) return;
+        
         if (fMechanic === 'Tuner' && !info.isTuner) return;
+        if (fMechanic === 'Pendulum' && !info.isPendulum) return;
+        if (fMechanic === 'Spirit' && !info.isSpirit) return;
+        if (fMechanic === 'Gemini' && !info.isGemini) return;
+        if (fMechanic === 'Union' && !info.isUnion) return;
+        if (fMechanic === 'Toon' && !info.isToon) return;
+        if (fMechanic === 'Flip' && !info.isFlip) return;
+
         if (fAtk !== '' && info.atk != fAtk) return;
         if (fDef !== '' && info.def != fDef) return;
         if (info.level < fLvlMin || info.level > fLvlMax) return;
-      } else { if (fRace !== 'All' && info.race !== fRace) return; }
+      } else {
+        if (fRace !== 'All' && info.race !== fRace) return;
+      }
+
+      // 2. Logic Check
       const userQty = userCounts[name] || 0;
       const inclusionRate = Math.round((stats.playedIn / totalBaselineDecks) * 100);
       let suggestedQty = stats["3x"] >= stats["2x"] && stats["3x"] >= stats["1x"] ? 3 : stats["2x"] >= stats["1x"] ? 2 : 1;
+
       if (userQty < suggestedQty) {
         const ratios = [];
         if (stats["3x"] > 0) ratios.push({ label: "3x", val: Math.round((stats["3x"] / totalBaselineDecks) * 100) });
@@ -185,28 +203,27 @@ export default function AnalyzerPage() {
         recs.push({ name, userQty, suggestedQty, inclusionRate, imgId: stats.imgId, ratios });
       }
     });
+
     recs.sort((a, b) => b.inclusionRate - a.inclusionRate);
     if (fReverse) recs.reverse();
     return recs;
   };
 
-  const currentRecs = getRecommendations().slice((recPage - 1) * RECS_PER_PAGE, recPage * RECS_PER_PAGE);
+  const allRecs = getRecommendations();
+  const totalPages = Math.ceil(allRecs.length / RECS_PER_PAGE);
+  const currentRecs = allRecs.slice((recPage - 1) * RECS_PER_PAGE, recPage * RECS_PER_PAGE);
 
   const UserRow = ({title, list}) => (
     <div className="mb-8">
-      <h3 className="text-zinc-600 font-black text-[10px] uppercase tracking-[0.3em] mb-4 border-b border-zinc-800 pb-1">{title} — {list.length} Cards</h3>
+      <h3 className="text-zinc-600 font-black text-[10px] uppercase tracking-[0.3em] mb-4 border-b border-zinc-800 pb-1">{title} — {list.length}</h3>
       <div className="grid grid-cols-5 md:grid-cols-10 gap-1.5">
         {list.map((c, i) => {
           const m = cardMarkers[c.name] || 0;
-          const borderClass = m === 1 ? "border-green-500 scale-105 z-10" : m === 2 ? "border-blue-500 scale-105 z-10" : m === 3 ? "border-red-500 scale-105 z-10" : "border-transparent opacity-80 hover:opacity-100";
+          const borderClass = m === 1 ? "border-green-500 scale-105 z-10 shadow-[0_0_10px_rgba(34,197,94,0.5)]" : m === 2 ? "border-blue-500 scale-105 z-10 shadow-[0_0_10px_rgba(59,130,246,0.5)]" : m === 3 ? "border-red-500 scale-105 z-10 shadow-[0_0_10px_rgba(239,68,68,0.5)]" : "border-transparent opacity-80 hover:opacity-100";
           return (
             <div key={i} onClick={() => toggleMarker(c.name)} className={`relative border-2 rounded-sm cursor-pointer transition-all duration-200 ${borderClass}`}>
               <img src={`https://images.ygoprodeck.com/images/cards/${c.imgId}.jpg`} className="w-full rounded-sm" title={c.name} />
-              {m !== 0 && (
-                  <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border border-black flex items-center justify-center text-[6px] font-bold ${m === 1 ? "bg-green-500" : m === 2 ? "bg-blue-500" : "bg-red-500"}`}>
-                      {m === 1 ? "S" : m === 2 ? "N" : "B"}
-                  </div>
-              )}
+              {m !== 0 && <div className={`absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full border border-black flex items-center justify-center text-[7px] font-black text-white ${m === 1 ? "bg-green-500" : m === 2 ? "bg-blue-500" : "bg-red-500"}`}>{m === 1 ? "S" : m === 2 ? "N" : "B"}</div>}
             </div>
           );
         })}
@@ -215,24 +232,41 @@ export default function AnalyzerPage() {
   );
 
   return (
-    <div className="min-h-screen bg-black text-white p-4 md:p-10 font-sans">
+    <div className="min-h-screen bg-black text-white p-4 md:p-10 font-sans relative">
+      {/* BACK BUTTON */}
+      <Link href="/" className="fixed top-6 left-6 z-[110] bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:border-blue-400 transition-all shadow-2xl">
+        ◀ Back to Trends
+      </Link>
+
       <div className="flex flex-col items-center mb-10 text-center">
         <h1 className="text-5xl font-black text-blue-600 uppercase italic tracking-tighter drop-shadow-[0_0_15px_rgba(37,99,235,0.3)]">Deck Analyzer</h1>
       </div>
 
-      {/* --- FULL FILTER BAR --- */}
+      {/* --- FULL FILTER BAR (RESTORED) --- */}
       <div className="max-w-[1600px] mx-auto bg-zinc-900 border border-zinc-800 p-6 rounded-3xl mb-12 shadow-2xl space-y-6">
         <div className="flex flex-wrap gap-4 items-end">
-          <div className="flex flex-col flex-grow min-w-[200px]"><label className="text-[10px] text-blue-500 uppercase font-bold mb-1">Search Suggestions</label><input type="text" value={fSearch} onChange={(e) => handleFilterChange(setFSearch, e.target.value)} placeholder="Type name..." className="bg-black border border-zinc-700 rounded-lg p-2 text-xs outline-none focus:border-blue-500" /></div>
+          <div className="flex flex-col flex-grow min-w-[200px]"><label className="text-[10px] text-blue-500 uppercase font-black mb-1">Search Suggestions</label><input type="text" value={fSearch} onChange={(e) => handleFilterChange(setFSearch, e.target.value)} placeholder="Search card..." className="bg-black border border-zinc-700 rounded-lg p-2 text-xs outline-none focus:border-blue-500" /></div>
           <div className="flex flex-col"><label className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Baseline</label><select value={baseline} onChange={(e) => {setBaseline(e.target.value); setRecPage(1);}} className="bg-black border border-zinc-700 rounded-lg p-2 text-xs text-blue-400 font-bold outline-none cursor-pointer"><option value="overall">Global Trends</option>{Object.keys(metaData.archetypes).sort().map(a => <option key={a} value={a}>{a}</option>)}</select></div>
           <div className="flex flex-col"><label className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Category</label><select value={fMainType} onChange={(e) => handleCategoryChange(e.target.value)} className="bg-black border border-zinc-700 rounded-lg p-2 text-xs outline-none"><option value="All">All Types</option><option value="Monster">Monster</option><option value="Spell">Spell</option><option value="Trap">Trap</option></select></div>
+          <div className="flex flex-col"><label className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Location</label><select value={fDeckType} onChange={(e) => handleFilterChange(setFDeckType, e.target.value)} className="bg-black border border-zinc-700 rounded-lg p-2 text-xs outline-none"><option value="All">All</option><option value="Main">Main Only</option><option value="Extra">Extra Only</option></select></div>
+
           {fMainType === 'Monster' && (
             <>
               <div className="flex flex-col"><label className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Attribute</label><select value={fAttribute} onChange={(e) => handleFilterChange(setFAttribute, e.target.value)} className="bg-black border border-zinc-700 rounded-lg p-2 text-xs">{attributes.map(a => <option key={a} value={a}>{a}</option>)}</select></div>
-              <div className="flex flex-col"><label className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Level Range</label><div className="flex gap-1"><select value={fLvlMin} onChange={(e) => handleFilterChange(setFLvlMin, Number(e.target.value))} className="bg-black border border-zinc-700 rounded p-1.5 text-xs">{[...Array(14)].map((_,i) => <option key={i} value={i}>{i}</option>)}</select><select value={fLvlMax} onChange={(e) => handleFilterChange(setFLvlMax, Number(e.target.value))} className="bg-black border border-zinc-700 rounded p-1.5 text-xs">{[...Array(14)].map((_,i) => <option key={i} value={i}>{i}</option>)}</select></div></div>
+              <div className="flex flex-col"><label className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Race/Type</label><select value={fRace} onChange={(e) => handleFilterChange(setFRace, e.target.value)} className="bg-black border border-zinc-700 rounded-lg p-2 text-xs">{monsterRaces.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
+              <div className="flex flex-col"><label className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Frame</label><select value={fFrame} onChange={(e) => handleFilterChange(setFFrame, e.target.value)} className="bg-black border border-zinc-700 rounded-lg p-2 text-xs">{frames.map(f => <option key={f} value={f}>{f}</option>)}</select></div>
+              <div className="flex flex-col"><label className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Mechanic</label><select value={fMechanic} onChange={(e) => handleFilterChange(setFMechanic, e.target.value)} className="bg-black border border-zinc-700 rounded-lg p-2 text-xs">{mechanics.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
+              <div className="flex flex-col"><label className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Lvl Range</label><div className="flex gap-1"><select value={fLvlMin} onChange={(e) => handleFilterChange(setFLvlMin, Number(e.target.value))} className="bg-black border border-zinc-700 rounded p-1.5 text-xs text-center">{[...Array(14)].map((_,i) => <option key={i} value={i}>{i}</option>)}</select><select value={fLvlMax} onChange={(e) => handleFilterChange(setFLvlMax, Number(e.target.value))} className="bg-black border border-zinc-700 rounded p-1.5 text-xs text-center">{[...Array(14)].map((_,i) => <option key={i} value={i}>{i}</option>)}</select></div></div>
+              <div className="flex flex-col w-12"><label className="text-[10px] text-zinc-500 uppercase font-bold mb-1">ATK</label><input type="number" value={fAtk} onChange={(e) => handleFilterChange(setFAtk, e.target.value)} className="bg-black border border-zinc-700 rounded p-2 text-xs text-center" /></div>
+              <div className="flex flex-col w-12"><label className="text-[10px] text-zinc-500 uppercase font-bold mb-1">DEF</label><input type="number" value={fDef} onChange={(e) => handleFilterChange(setFDef, e.target.value)} className="bg-black border border-zinc-700 rounded p-2 text-xs text-center" /></div>
             </>
           )}
-          <label className="flex items-center gap-2 cursor-pointer bg-blue-900/30 border border-blue-700/50 p-2 px-4 rounded-lg text-[10px] h-[36px]"><input type="checkbox" checked={fReverse} onChange={(e) => handleFilterChange(setFReverse, e.target.checked)} /><span className="font-bold uppercase tracking-tighter text-blue-200">Reverse</span></label>
+
+          {(fMainType === 'Spell' || fMainType === 'Trap') && (
+            <div className="flex flex-col"><label className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Property</label><select value={fRace} onChange={(e) => handleFilterChange(setFRace, e.target.value)} className="bg-black border border-zinc-700 rounded-lg p-2 text-xs">{(fMainType === 'Spell' ? spellRaces : trapRaces).map(r => <option key={r} value={r}>{r}</option>)}</select></div>
+          )}
+
+          <label className="flex items-center gap-2 cursor-pointer bg-blue-900/30 border border-blue-700/50 p-2 px-4 rounded-lg text-[10px] h-[36px]"><input type="checkbox" checked={fReverse} onChange={(e) => handleFilterChange(setFReverse, e.target.checked)} className="accent-blue-500" /><span className="font-bold uppercase tracking-tighter text-blue-200">Reverse</span></label>
           <button onClick={resetFilters} className="text-[10px] font-black text-red-500 uppercase border-b border-red-900 pb-1 ml-auto">Reset</button>
         </div>
       </div>
@@ -253,11 +287,11 @@ export default function AnalyzerPage() {
           {userDeck && (
             <div className="bg-zinc-900 p-5 rounded-3xl border border-zinc-800 shadow-2xl">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-[10px] font-black uppercase text-blue-500 tracking-widest">Recommendations</h2>
+                <h2 className="text-[10px] font-black uppercase text-blue-500 tracking-widest">Suggestions</h2>
                 <div className="flex items-center gap-2">
                   <button onClick={() => setRecPage(p => Math.max(1, p - 1))} disabled={recPage === 1} className="text-xs disabled:opacity-20">◀</button>
-                  <span className="text-[9px] font-mono text-zinc-500">{recPage}</span>
-                  <button onClick={() => setRecPage(p => p + 1)} className="text-xs">▶</button>
+                  <span className="text-[9px] font-mono text-zinc-500">{recPage}/{totalPages || 1}</span>
+                  <button onClick={() => setRecPage(p => Math.min(totalPages, p + 1))} disabled={recPage === totalPages} className="text-xs disabled:opacity-20">▶</button>
                 </div>
               </div>
               <div className="space-y-4">
@@ -273,9 +307,10 @@ export default function AnalyzerPage() {
                     <div className="flex flex-wrap gap-1 mt-1">
                       {r.ratios.map(ratio => <span key={ratio.label} className="text-[8px] font-bold bg-zinc-900 px-1.5 py-0.5 rounded text-zinc-400 border border-zinc-800">{ratio.label}: {ratio.val}%</span>)}
                     </div>
-                    <div className="mt-2 bg-blue-900/20 text-blue-400 text-center py-1.5 rounded-lg text-[9px] font-black uppercase border border-blue-900/30">Pro Avg: {r.suggestedQty}x | You: {r.userQty}x</div>
+                    <div className="mt-2 bg-blue-900/20 text-blue-400 text-center py-1.5 rounded-lg text-[9px] font-black uppercase border border-blue-900/30">Pro: {r.suggestedQty}x | You: {r.userQty}x</div>
                   </div>
                 ))}
+                {allRecs.length === 0 && <p className="text-center text-zinc-600 text-[10px] py-4 font-bold uppercase tracking-widest italic">Matches baseline filters.</p>}
               </div>
             </div>
           )}
@@ -287,7 +322,7 @@ export default function AnalyzerPage() {
             <div className="bg-zinc-950 p-6 md:p-10 rounded-[3rem] border border-zinc-800 shadow-2xl animate-in fade-in zoom-in-95 duration-500">
                 <div className="mb-6 p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800 text-center">
                     <p className="text-[10px] font-black uppercase text-zinc-500 tracking-[0.2em]">Marker Controls</p>
-                    <p className="text-[9px] text-zinc-600 mt-1 italic">Click cards below to tag as: <span className="text-green-500">Starter</span> → <span className="text-blue-500">Non-Engine</span> → <span className="text-red-500">Brick</span></p>
+                    <p className="text-[9px] text-zinc-600 mt-1 italic">Click cards to tag: <span className="text-green-500">Starter</span> → <span className="text-blue-500">Non-Engine</span> → <span className="text-red-500">Brick</span></p>
                 </div>
               <UserRow title="Main Deck" list={userDeck.main} />
               <UserRow title="Extra Deck" list={userDeck.extra} />
@@ -301,7 +336,7 @@ export default function AnalyzerPage() {
         {/* RIGHT BAR: CALCULATORS */}
         <div className="lg:col-span-3 space-y-6">
           <div className="bg-zinc-900 p-6 rounded-3xl border border-zinc-800 shadow-xl space-y-4">
-            <h2 className="text-sm font-black uppercase text-blue-500 tracking-tighter italic border-b border-zinc-800 pb-2">Manual Calculator</h2>
+            <h2 className="text-sm font-black uppercase text-blue-500 tracking-tighter italic border-b border-zinc-800 pb-2 text-center">Calculator</h2>
             <div className="space-y-3">
               <div><label className="text-[9px] font-bold text-zinc-500 uppercase block mb-1">Deck Size</label><input type="number" value={hpN} onChange={(e) => setHpN(e.target.value)} className="w-full bg-black border border-zinc-700 rounded-lg p-2 text-xs font-bold outline-none focus:border-blue-500" /></div>
               <div><label className="text-[9px] font-bold text-zinc-500 uppercase block mb-1">Hand Size</label><input type="number" value={hpn} onChange={(e) => setHpn(e.target.value)} className="w-full bg-black border border-zinc-700 rounded-lg p-2 text-xs font-bold outline-none focus:border-blue-500" /></div>
@@ -320,25 +355,22 @@ export default function AnalyzerPage() {
           {/* ENGINE CONSISTENCY PANEL */}
           {userDeck && mStats && (
             <div className="bg-zinc-900 p-6 rounded-3xl border border-zinc-800 shadow-xl space-y-4 animate-in slide-in-from-right-8 duration-500">
-                <h2 className="text-sm font-black uppercase text-green-500 tracking-tighter italic border-b border-zinc-800 pb-2">Deck Consistency</h2>
-                
+                <h2 className="text-sm font-black uppercase text-green-500 tracking-tighter italic border-b border-zinc-800 pb-2 text-center">Consistency</h2>
                 <div className="space-y-4">
                     <div className="p-3 bg-green-950/20 rounded-2xl border border-green-900/30">
-                        <p className="text-[9px] font-black uppercase text-green-500 mb-1 tracking-widest">Starters ({mStats.kStart} Cards)</p>
-                        <p className="text-lg font-black text-white leading-none">1 out of {mStats.starterRatio}</p>
-                        <p className="text-[9px] text-zinc-500 mt-1 uppercase font-bold tracking-tighter">Games you will brick</p>
+                        <p className="text-[9px] font-black uppercase text-green-500 mb-1 tracking-widest text-center">Starters ({mStats.kStart})</p>
+                        <p className="text-lg font-black text-white leading-none text-center">1 out of {mStats.starterRatio}</p>
+                        <p className="text-[8px] text-zinc-500 mt-1 uppercase font-bold tracking-tighter text-center">Games you will brick</p>
                     </div>
-
                     <div className="p-3 bg-blue-950/20 rounded-2xl border border-blue-900/30">
-                        <p className="text-[9px] font-black uppercase text-blue-500 mb-1 tracking-widest">Non-Engine ({mStats.kNon} Cards)</p>
-                        <p className="text-lg font-black text-white leading-none">{mStats.avgNonEngine}</p>
-                        <p className="text-[9px] text-zinc-500 mt-1 uppercase font-bold tracking-tighter">Average per opening hand</p>
+                        <p className="text-[9px] font-black uppercase text-blue-500 mb-1 tracking-widest text-center">Non-Engine ({mStats.kNon})</p>
+                        <p className="text-lg font-black text-white leading-none text-center">{mStats.avgNonEngine}</p>
+                        <p className="text-[8px] text-zinc-500 mt-1 uppercase font-bold tracking-tighter text-center">Avg per opening hand</p>
                     </div>
-
                     <div className="p-3 bg-red-950/20 rounded-2xl border border-red-900/30">
-                        <p className="text-[9px] font-black uppercase text-red-500 mb-1 tracking-widest">Bricks ({mStats.kBrick} Cards)</p>
-                        <p className="text-lg font-black text-white leading-none">Every {mStats.brickRatio}</p>
-                        <p className="text-[9px] text-zinc-500 mt-1 uppercase font-bold tracking-tighter">Games you see 1+ bricks</p>
+                        <p className="text-[9px] font-black uppercase text-red-500 mb-1 tracking-widest text-center">Bricks ({mStats.kBrick})</p>
+                        <p className="text-lg font-black text-white leading-none text-center">Every {mStats.brickRatio}</p>
+                        <p className="text-[8px] text-zinc-500 mt-1 uppercase font-bold tracking-tighter text-center">Games you see 1+ bricks</p>
                     </div>
                 </div>
             </div>
