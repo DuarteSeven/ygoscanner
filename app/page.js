@@ -1,9 +1,11 @@
 "use client";
 import React, { useState } from 'react';
 import metaData from '../meta_data.json'; 
+import Link from 'next/link'; // Added for navigation to the Analyzer page
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState('overall');
+  // --- CHANGED: Landing tab is now 'meta-tiers' ---
+  const [activeTab, setActiveTab] = useState('meta-tiers');
   const [selectedArch, setSelectedArch] = useState(null);
   const [selectedDeckIndex, setSelectedDeckIndex] = useState("NONE"); 
   const [archSubTab, setArchSubTab] = useState('main'); 
@@ -164,17 +166,15 @@ export default function Home() {
       }))
       .sort((a, b) => b.count - a.count);
 
-    // Filter Logic for Tiers
     const t1 = archs.filter(a => a.pct > 15);
     const t2 = archs.filter(a => a.pct >= 5 && a.pct <= 15);
     const t3 = archs.filter(a => a.pct >= 3 && a.pct < 5); 
-    const rogue = archs.filter(a => a.pct >= 1 && a.pct < 3); // STRICT 1-3%
+    const rogue = archs.filter(a => a.pct >= 1 && a.pct < 3);
 
-    // Pie Chart Visual Logic
     const chartData = [];
     let otherCount = 0;
     archs.forEach(a => {
-      if (a.pct >= 1) chartData.push(a); // Group < 1% as Other
+      if (a.pct >= 1) chartData.push(a);
       else otherCount += a.count;
     });
     if (otherCount > 0) chartData.push({ name: 'Other', count: otherCount, pct: (otherCount / total) * 100 });
@@ -243,14 +243,20 @@ export default function Home() {
       <header className="flex flex-col items-center mb-10">
         <h1 className="text-6xl font-black tracking-tighter italic text-blue-600 mb-8 uppercase text-center drop-shadow-[0_0_15px_rgba(37,99,235,0.3)]">Pro Meta Scan</h1>
         <div className="flex bg-zinc-900 p-1 rounded-2xl border border-zinc-800 gap-1 flex-wrap justify-center shadow-xl">
-          {['overall', 'side', 'archetypes', 'meta-tiers'].map(t => (
+          {/* NAVIGATION BAR */}
+          {['meta-tiers', 'overall', 'side', 'archetypes'].map(t => (
             <button key={t} onClick={() => { setActiveTab(t); setSelectedDeckIndex("NONE"); resetFilters(); }} className={`px-10 py-3 rounded-xl font-black text-xs uppercase transition ${activeTab === t ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}>
               {t.replace('-', ' ')}
             </button>
           ))}
+          {/* ANALYZER TAB */}
+          <Link href="/analyzer" className="px-10 py-3 rounded-xl font-black text-xs uppercase transition text-zinc-500 hover:text-blue-400 border-l border-zinc-800 ml-2">
+            Analyzer
+          </Link>
         </div>
       </header>
 
+      {/* FILTER BAR - Hidden for Tiers and Deck View */}
       {selectedDeckIndex === "NONE" && activeTab !== 'meta-tiers' && (
         <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl mb-12 shadow-2xl space-y-6">
           <div className="flex flex-wrap gap-4 items-end">

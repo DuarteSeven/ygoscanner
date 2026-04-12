@@ -9,11 +9,15 @@ export default function AnalyzerPage() {
   const [recPage, setRecPage] = useState(1);
   const RECS_PER_PAGE = 5;
 
+  // --- MARKER STATE ---
+  // 0: None, 1: Starter (Green), 2: Non-Engine (Blue), 3: Brick (Red)
+  const [cardMarkers, setCardMarkers] = useState({}); 
+
   // --- HYPERGEOMETRIC STATE ---
-  const [hpN, setHpN] = useState(40); // Population Size (Deck)
-  const [hpn, setHpn] = useState(5);  // Sample Size (Hand)
-  const [hpK, setHpK] = useState(3);  // Successes in Pop (Cards in deck)
-  const [hpk, setHpk] = useState(1);  // Successes in Sample (Wanted in hand)
+  const [hpN, setHpN] = useState(40);
+  const [hpn, setHpn] = useState(5); 
+  const [hpK, setHpK] = useState(3); 
+  const [hpk, setHpk] = useState(1); 
   const [hpResults, setHpResults] = useState(null);
 
   // --- FILTER STATES ---
@@ -37,7 +41,7 @@ export default function AnalyzerPage() {
   const spellRaces = ['All', 'Normal', 'Field', 'Equip', 'Continuous', 'Quick-Play', 'Ritual'];
   const trapRaces = ['All', 'Normal', 'Continuous', 'Counter'];
 
-  // --- HYPERGEOMETRIC MATH ---
+  // --- MATH ENGINE ---
   const nCr = (n, r) => {
     if (r < 0 || r > n) return 0;
     if (r === 0 || r === n) return 1;
@@ -47,28 +51,62 @@ export default function AnalyzerPage() {
     return res;
   };
 
+  const getProb = (N, n, K, k) => (nCr(K, k) * nCr(N - K, n - k)) / nCr(N, n);
+
   const calculateHyper = () => {
-    const N = parseInt(hpN); const n = parseInt(hpn);
+    const N = parseInt(hpN); const n_drawn = parseInt(hpn);
     const K = parseInt(hpK); const k_wanted = parseInt(hpk);
-    if (isNaN(N) || isNaN(n) || isNaN(K) || isNaN(k_wanted)) return;
-
-    const probExact = (k) => (nCr(K, k) * nCr(N - K, n - k)) / nCr(N, n);
-
+    if (isNaN(N) || isNaN(n_drawn) || isNaN(K) || isNaN(k_wanted) || N <= 0) return;
+    const probExact = getProb(N, n_drawn, K, k_wanted);
     let atLeast = 0;
-    for (let i = k_wanted; i <= Math.min(n, K); i++) atLeast += probExact(i);
-
+    for (let i = k_wanted; i <= Math.min(n_drawn, K); i++) atLeast += getProb(N, n_drawn, K, i);
     let atMost = 0;
-    for (let i = 0; i <= k_wanted; i++) atMost += probExact(i);
-
-    setHpResults({
-      atLeast: (atLeast * 100).toFixed(2),
-      exactly: (probExact(k_wanted) * 100).toFixed(2),
-      atMost: (atMost * 100).toFixed(2),
-      zero: (probExact(0) * 100).toFixed(2)
-    });
+    for (let i = 0; i <= k_wanted; i++) atMost += getProb(N, n_drawn, K, i);
+    setHpResults({ atLeast: (atLeast * 100).toFixed(2), exactly: (probExact * 100).toFixed(2), atMost: (atMost * 100).toFixed(2), zero: (getProb(N, n_drawn, K, 0) * 100).toFixed(2) });
   };
 
   useEffect(() => { calculateHyper(); }, [hpN, hpn, hpK, hpk]);
+
+  // --- MARKER LOGIC ---
+  const toggleMarker = (name) => {
+    setCardMarkers(prev => {
+      const current = prev[name] || 0;
+      const next = (current + 1) % 4; // Cycles 0, 1, 2, 3
+      return { ...prev, [name]: next };
+    });
+  };
+
+  const getMarkerStats = () => {
+    if (!userDeck) return null;
+    const N = userDeck.main.length;
+    const n = 5;
+    if (N < n) return null;
+
+    // Count quantities based on markers
+    let kStart = 0; let kNon = 0; let kBrick = 0;
+    Object.entries(cardMarkers).forEach(([name, type]) => {
+      const count = userDeck.mainCounts[name] || 0;
+      if (type === 1) kStart += count;
+      if (type === 2) kNon += count;
+      if (type === 3) kBrick += count;
+    });
+
+    // 1. Starters: Chance of seeing 0 (Bricking)
+    const probZeroStart = getProb(N, n, kStart, 0);
+    const starterRatio = probZeroStart > 0 ? (1 / probZeroStart).toFixed(1) : "0";
+
+    // 2. Non-Engine: Average per hand (Expected Value)
+    const avgNonEngine = (n * (kNon / N)).toFixed(1);
+
+    // 3. Bricks: Chance of seeing 1 or more
+    const probZeroBrick = getProb(N, n, kBrick, 0);
+    const brickChance = 1 - probZeroBrick;
+    const brickRatio = brickChance > 0 ? (1 / brickChance).toFixed(1) : "0";
+
+    return { starterRatio, avgNonEngine, brickRatio, kStart, kNon, kBrick };
+  };
+
+  const mStats = getMarkerStats();
 
   const handleFilterChange = (setter, value) => { setter(value); setRecPage(1); };
   const handleCategoryChange = (val) => {
@@ -136,11 +174,9 @@ export default function AnalyzerPage() {
         if (fDef !== '' && info.def != fDef) return;
         if (info.level < fLvlMin || info.level > fLvlMax) return;
       } else { if (fRace !== 'All' && info.race !== fRace) return; }
-
       const userQty = userCounts[name] || 0;
       const inclusionRate = Math.round((stats.playedIn / totalBaselineDecks) * 100);
       let suggestedQty = stats["3x"] >= stats["2x"] && stats["3x"] >= stats["1x"] ? 3 : stats["2x"] >= stats["1x"] ? 2 : 1;
-
       if (userQty < suggestedQty) {
         const ratios = [];
         if (stats["3x"] > 0) ratios.push({ label: "3x", val: Math.round((stats["3x"] / totalBaselineDecks) * 100) });
@@ -156,13 +192,24 @@ export default function AnalyzerPage() {
 
   const currentRecs = getRecommendations().slice((recPage - 1) * RECS_PER_PAGE, recPage * RECS_PER_PAGE);
 
-  const Row = ({title, list}) => (
+  const UserRow = ({title, list}) => (
     <div className="mb-8">
-      <h3 className="text-zinc-600 font-black text-[10px] uppercase tracking-[0.3em] mb-4 border-b border-zinc-800 pb-2">{title} — {list.length}</h3>
+      <h3 className="text-zinc-600 font-black text-[10px] uppercase tracking-[0.3em] mb-4 border-b border-zinc-800 pb-1">{title} — {list.length} Cards</h3>
       <div className="grid grid-cols-5 md:grid-cols-10 gap-1.5">
-        {list.map((c, i) => (
-          <img key={i} src={`https://images.ygoprodeck.com/images/cards/${c.imgId}.jpg`} className="w-full rounded shadow hover:scale-150 hover:z-50 transition cursor-help" title={c.name} />
-        ))}
+        {list.map((c, i) => {
+          const m = cardMarkers[c.name] || 0;
+          const borderClass = m === 1 ? "border-green-500 scale-105 z-10" : m === 2 ? "border-blue-500 scale-105 z-10" : m === 3 ? "border-red-500 scale-105 z-10" : "border-transparent opacity-80 hover:opacity-100";
+          return (
+            <div key={i} onClick={() => toggleMarker(c.name)} className={`relative border-2 rounded-sm cursor-pointer transition-all duration-200 ${borderClass}`}>
+              <img src={`https://images.ygoprodeck.com/images/cards/${c.imgId}.jpg`} className="w-full rounded-sm" title={c.name} />
+              {m !== 0 && (
+                  <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border border-black flex items-center justify-center text-[6px] font-bold ${m === 1 ? "bg-green-500" : m === 2 ? "bg-blue-500" : "bg-red-500"}`}>
+                      {m === 1 ? "S" : m === 2 ? "N" : "B"}
+                  </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -191,7 +238,7 @@ export default function AnalyzerPage() {
       </div>
 
       <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* LEFT BAR: UPLOAD & RECS (Col 1-3) */}
+        {/* LEFT BAR: UPLOAD & RECS */}
         <div className="lg:col-span-3 space-y-6">
           <div className="bg-zinc-900 p-6 rounded-3xl border border-zinc-800 shadow-xl">
             <label className="block text-[10px] font-black text-zinc-500 uppercase mb-4 tracking-widest text-center">1. Upload .YDK</label>
@@ -208,7 +255,7 @@ export default function AnalyzerPage() {
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-[10px] font-black uppercase text-blue-500 tracking-widest">Recommendations</h2>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setRecPage(p => p - 1)} disabled={recPage === 1} className="text-xs disabled:opacity-20">◀</button>
+                  <button onClick={() => setRecPage(p => Math.max(1, p - 1))} disabled={recPage === 1} className="text-xs disabled:opacity-20">◀</button>
                   <span className="text-[9px] font-mono text-zinc-500">{recPage}</span>
                   <button onClick={() => setRecPage(p => p + 1)} className="text-xs">▶</button>
                 </div>
@@ -234,68 +281,68 @@ export default function AnalyzerPage() {
           )}
         </div>
 
-        {/* CENTER: DECK VIEW (Col 4-9) */}
+        {/* CENTER: DECK VIEW */}
         <div className="lg:col-span-6">
           {userDeck ? (
             <div className="bg-zinc-950 p-6 md:p-10 rounded-[3rem] border border-zinc-800 shadow-2xl animate-in fade-in zoom-in-95 duration-500">
-              <Row title="Main Deck" list={userDeck.main} />
-              <Row title="Extra Deck" list={userDeck.extra} />
-              <Row title="Side Deck" list={userDeck.side} />
+                <div className="mb-6 p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800 text-center">
+                    <p className="text-[10px] font-black uppercase text-zinc-500 tracking-[0.2em]">Marker Controls</p>
+                    <p className="text-[9px] text-zinc-600 mt-1 italic">Click cards below to tag as: <span className="text-green-500">Starter</span> → <span className="text-blue-500">Non-Engine</span> → <span className="text-red-500">Brick</span></p>
+                </div>
+              <UserRow title="Main Deck" list={userDeck.main} />
+              <UserRow title="Extra Deck" list={userDeck.extra} />
+              <UserRow title="Side Deck" list={userDeck.side} />
             </div>
           ) : (
             <div className="h-full min-h-[500px] flex flex-col items-center justify-center border-4 border-dashed border-zinc-900 rounded-[4rem] opacity-20"><p className="text-4xl font-black uppercase tracking-tighter text-zinc-600 text-center">Ready for Analysis</p></div>
           )}
         </div>
 
-        {/* RIGHT BAR: HYPERGEOMETRIC CALCULATOR (Col 10-12) */}
+        {/* RIGHT BAR: CALCULATORS */}
         <div className="lg:col-span-3 space-y-6">
           <div className="bg-zinc-900 p-6 rounded-3xl border border-zinc-800 shadow-xl space-y-4">
-            <h2 className="text-sm font-black uppercase text-blue-500 tracking-tighter italic border-b border-zinc-800 pb-2">Probability Calculator</h2>
-            
+            <h2 className="text-sm font-black uppercase text-blue-500 tracking-tighter italic border-b border-zinc-800 pb-2">Manual Calculator</h2>
             <div className="space-y-3">
-              <div>
-                <label className="text-[9px] font-bold text-zinc-500 uppercase block mb-1">Deck Size</label>
-                <input type="number" value={hpN} onChange={(e) => setHpN(e.target.value)} className="w-full bg-black border border-zinc-700 rounded-lg p-2 text-xs font-bold outline-none focus:border-blue-500" />
-              </div>
-              <div>
-                <label className="text-[9px] font-bold text-zinc-500 uppercase block mb-1">Cards Drawn (Hand)</label>
-                <input type="number" value={hpn} onChange={(e) => setHpn(e.target.value)} className="w-full bg-black border border-zinc-700 rounded-lg p-2 text-xs font-bold outline-none focus:border-blue-500" />
-              </div>
-              <div>
-                <label className="text-[9px] font-bold text-zinc-500 uppercase block mb-1">Copies in Deck</label>
-                <input type="number" value={hpK} onChange={(e) => setHpK(e.target.value)} className="w-full bg-black border border-zinc-700 rounded-lg p-2 text-xs font-bold outline-none focus:border-blue-500" />
-              </div>
-              <div>
-                <label className="text-[9px] font-bold text-zinc-500 uppercase block mb-1">Wanted in Hand</label>
-                <input type="number" value={hpk} onChange={(e) => setHpk(e.target.value)} className="w-full bg-black border border-zinc-700 rounded-lg p-2 text-xs font-bold outline-none focus:border-blue-500" />
-              </div>
+              <div><label className="text-[9px] font-bold text-zinc-500 uppercase block mb-1">Deck Size</label><input type="number" value={hpN} onChange={(e) => setHpN(e.target.value)} className="w-full bg-black border border-zinc-700 rounded-lg p-2 text-xs font-bold outline-none focus:border-blue-500" /></div>
+              <div><label className="text-[9px] font-bold text-zinc-500 uppercase block mb-1">Hand Size</label><input type="number" value={hpn} onChange={(e) => setHpn(e.target.value)} className="w-full bg-black border border-zinc-700 rounded-lg p-2 text-xs font-bold outline-none focus:border-blue-500" /></div>
+              <div><label className="text-[9px] font-bold text-zinc-500 uppercase block mb-1">Copies in Deck</label><input type="number" value={hpK} onChange={(e) => setHpK(e.target.value)} className="w-full bg-black border border-zinc-700 rounded-lg p-2 text-xs font-bold outline-none focus:border-blue-500" /></div>
+              <div><label className="text-[9px] font-bold text-zinc-500 uppercase block mb-1">Wanted in Hand</label><input type="number" value={hpk} onChange={(e) => setHpk(e.target.value)} className="w-full bg-black border border-zinc-700 rounded-lg p-2 text-xs font-bold outline-none focus:border-blue-500" /></div>
             </div>
-
             {hpResults && (
               <div className="mt-6 space-y-2 border-t border-zinc-800 pt-4 animate-in slide-in-from-right-4 duration-300">
-                <div className="flex justify-between bg-blue-600/20 p-2 rounded-lg border border-blue-600/30">
-                  <span className="text-[10px] font-black text-blue-300 uppercase">1 or more</span>
-                  <span className="text-xs font-black text-blue-400">{hpResults.atLeast}%</span>
-                </div>
-                <div className="flex justify-between p-2">
-                  <span className="text-[10px] font-bold text-zinc-500 uppercase">Exactly {hpk}</span>
-                  <span className="text-xs font-bold text-zinc-300">{hpResults.exactly}%</span>
-                </div>
-                <div className="flex justify-between p-2">
-                  <span className="text-[10px] font-bold text-zinc-500 uppercase">{hpk} or less</span>
-                  <span className="text-xs font-bold text-zinc-300">{hpResults.atMost}%</span>
-                </div>
-                <div className="flex justify-between p-2 opacity-50">
-                  <span className="text-[10px] font-bold text-zinc-500 uppercase">Exactly 0</span>
-                  <span className="text-xs font-bold text-zinc-300">{hpResults.zero}%</span>
-                </div>
+                <div className="flex justify-between bg-blue-600/20 p-2 rounded-lg border border-blue-600/30"><span className="text-[10px] font-black text-blue-300 uppercase">1 or more</span><span className="text-xs font-black text-blue-400">{hpResults.atLeast}%</span></div>
+                <div className="flex justify-between p-2"><span className="text-[10px] font-bold text-zinc-500 uppercase">Exactly {hpk}</span><span className="text-xs font-bold text-zinc-300">{hpResults.exactly}%</span></div>
+                <div className="flex justify-between p-2 opacity-50"><span className="text-[10px] font-bold text-zinc-500 uppercase">Exactly 0</span><span className="text-xs font-bold text-zinc-300">{hpResults.zero}%</span></div>
               </div>
             )}
           </div>
 
-          <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl text-[9px] text-zinc-600 italic leading-relaxed">
-            Note: This calculator assumes you are drawing cards without replacement (standard hypergeometric distribution).
-          </div>
+          {/* ENGINE CONSISTENCY PANEL */}
+          {userDeck && mStats && (
+            <div className="bg-zinc-900 p-6 rounded-3xl border border-zinc-800 shadow-xl space-y-4 animate-in slide-in-from-right-8 duration-500">
+                <h2 className="text-sm font-black uppercase text-green-500 tracking-tighter italic border-b border-zinc-800 pb-2">Deck Consistency</h2>
+                
+                <div className="space-y-4">
+                    <div className="p-3 bg-green-950/20 rounded-2xl border border-green-900/30">
+                        <p className="text-[9px] font-black uppercase text-green-500 mb-1 tracking-widest">Starters ({mStats.kStart} Cards)</p>
+                        <p className="text-lg font-black text-white leading-none">1 out of {mStats.starterRatio}</p>
+                        <p className="text-[9px] text-zinc-500 mt-1 uppercase font-bold tracking-tighter">Games you will brick</p>
+                    </div>
+
+                    <div className="p-3 bg-blue-950/20 rounded-2xl border border-blue-900/30">
+                        <p className="text-[9px] font-black uppercase text-blue-500 mb-1 tracking-widest">Non-Engine ({mStats.kNon} Cards)</p>
+                        <p className="text-lg font-black text-white leading-none">{mStats.avgNonEngine}</p>
+                        <p className="text-[9px] text-zinc-500 mt-1 uppercase font-bold tracking-tighter">Average per opening hand</p>
+                    </div>
+
+                    <div className="p-3 bg-red-950/20 rounded-2xl border border-red-900/30">
+                        <p className="text-[9px] font-black uppercase text-red-500 mb-1 tracking-widest">Bricks ({mStats.kBrick} Cards)</p>
+                        <p className="text-lg font-black text-white leading-none">Every {mStats.brickRatio}</p>
+                        <p className="text-[9px] text-zinc-500 mt-1 uppercase font-bold tracking-tighter">Games you see 1+ bricks</p>
+                    </div>
+                </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
