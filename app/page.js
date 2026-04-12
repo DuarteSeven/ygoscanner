@@ -241,10 +241,10 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-black text-white p-4 md:p-10 font-sans">
       <header className="flex flex-col items-center mb-10">
-        <h1 className="text-6xl font-black tracking-tighter italic text-blue-600 mb-8 uppercase text-center drop-shadow-[0_0_15px_rgba(37,99,235,0.3)]">Pro Meta Scan</h1>
+        <h1 className="text-6xl font-black tracking-tighter italic text-blue-600 mb-8 uppercase text-center drop-shadow-[0_0_15px_rgba(37,99,235,0.3)]">YGO Meta Analyzer</h1>
         <div className="flex bg-zinc-900 p-1 rounded-2xl border border-zinc-800 gap-1 flex-wrap justify-center shadow-xl">
           {/* NAVIGATION BAR */}
-          {['meta-tiers', 'overall', 'side', 'archetypes'].map(t => (
+          {['meta-tiers', 'main-deck', 'side-deck', 'archetypes'].map(t => (
             <button key={t} onClick={() => { setActiveTab(t); setSelectedDeckIndex("NONE"); resetFilters(); }} className={`px-10 py-3 rounded-xl font-black text-xs uppercase transition ${activeTab === t ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}>
               {t.replace('-', ' ')}
             </button>
@@ -288,8 +288,8 @@ export default function Home() {
 
       <div className="animate-in fade-in duration-700">
         {activeTab === 'meta-tiers' && renderMetaTiers()}
-        {activeTab === 'overall' && renderGrid(metaData.overall, metaData.totalDecks)}
-        {activeTab === 'side' && renderGrid(metaData.overallSide, metaData.totalDecks)}
+        {activeTab === 'main-deck' && renderGrid(metaData.overall, metaData.totalDecks)}
+        {activeTab === 'side-deck' && renderGrid(metaData.overallSide, metaData.totalDecks)}
 
         {activeTab === 'archetypes' && (
           <div className="space-y-10">
